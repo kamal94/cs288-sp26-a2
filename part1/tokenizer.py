@@ -28,29 +28,31 @@ class Tokenizer:
             special_tokens: List of special token strings
         """
         self.vocab = vocab  # id -> bytes
-        self.inverse_vocab = {v: k for k, v in vocab.items()}  # bytes -> id (also used as rank)
+        self.inverse_vocab = {
+            v: k for k, v in vocab.items()
+        }  # bytes -> id (also used as rank)
         self.merges = merges
         # Note: We use inverse_vocab for BPE ranking, not the merges list.
         # In GPT-2/tiktoken, the token ID serves as the rank - lower ID = higher priority.
         # This is different from naive BPE which uses merge order.
-        
+
         # Handle special tokens
         self.special_tokens = special_tokens or []
         # Sort special tokens by length (descending) for longest-match-first
         self.special_tokens_sorted = sorted(self.special_tokens, key=len, reverse=True)
-        
+
         # Build special token to ID mapping
         self.special_token_ids = {}
         for token in self.special_tokens:
             token_bytes = token.encode("utf-8")
             if token_bytes in self.inverse_vocab:
                 self.special_token_ids[token] = self.inverse_vocab[token_bytes]
-        
+
         # GPT-2 regex pattern for pre-tokenization
         # This splits text into chunks that are tokenized independently
         self.pat = re.compile(
             r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
-            re.UNICODE
+            re.UNICODE,
         )
 
     def _get_pairs(self, tokens: list[bytes]) -> set[tuple[bytes, bytes]]:
@@ -64,10 +66,10 @@ class Tokenizer:
         """
         Apply BPE to a single token (sequence of bytes).
         Returns a list of merged byte sequences.
-        
+
         Uses vocab ranks (token IDs) to determine merge priority.
         Lower token ID = higher priority (more common/earlier merge).
-        
+
         Algorithm:
             1. Start with individual bytes as tokens
             2. While there are pairs that can be merged:
@@ -77,14 +79,36 @@ class Tokenizer:
         """
         # Start with individual bytes
         tokens = [bytes([b]) for b in token_bytes]
-        
+
         if len(tokens) <= 1:
             return tokens
-        
-        # TODO: Implement BPE algorithm
-        # Return tokens
-        
-        raise NotImplementedError("Implement _bpe")
+        to_merge = tokens
+        # print("len(to_merge) is", len(to_merge))
+        while len(to_merge) > 0:
+            print("to_merge is", to_merge)
+            vocab_scores = [
+                self.inverse_vocab.get(to_merge[i] + to_merge[i + 1], None)
+                for i in range(len(to_merge) - 1)
+            ]
+            print("vocab_scores is", vocab_scores)
+            
+            if all(score is None for score in vocab_scores):
+                break
+            lowest_rank = min([score for score in vocab_scores if score is not None])
+            lowest_index = vocab_scores.index(lowest_rank)
+            print("min is", lowest_rank)
+            print("lowest_index is", lowest_index)
+            merged_token = to_merge[lowest_index] + to_merge[lowest_index + 1]
+            to_merge = (
+                to_merge[:lowest_index] + [merged_token] + to_merge[lowest_index + 2 :]
+            )
+        return to_merge
+
+        # # TODO: Implement BPE algorithm
+
+        # # Return tokens
+
+        # raise NotImplementedError("Implement _bpe")
 
     def _split_with_special_tokens(self, text: str) -> list[tuple[str, bool]]:
         """
@@ -93,21 +117,21 @@ class Tokenizer:
         """
         if not self.special_tokens_sorted:
             return [(text, False)] if text else []
-        
+
         result = []
         remaining = text
-        
+
         while remaining:
             # Find the earliest occurring special token
             earliest_pos = len(remaining)
             earliest_token = None
-            
+
             for special in self.special_tokens_sorted:
                 pos = remaining.find(special)
                 if pos != -1 and pos < earliest_pos:
                     earliest_pos = pos
                     earliest_token = special
-            
+
             if earliest_token is None:
                 # No special token found, add remaining text
                 if remaining:
@@ -119,14 +143,14 @@ class Tokenizer:
                     result.append((remaining[:earliest_pos], False))
                 # Add the special token
                 result.append((earliest_token, True))
-                remaining = remaining[earliest_pos + len(earliest_token):]
-        
+                remaining = remaining[earliest_pos + len(earliest_token) :]
+
         return result
 
     def _encode_chunk(self, text: str) -> list[int]:
         """
         Encode a text chunk (without special tokens) to token IDs.
-        
+
         Algorithm:
             1. Use regex pattern (self.pat) to split text into pre-tokens
             2. For each pre-token:
@@ -137,30 +161,39 @@ class Tokenizer:
         """
         if not text:
             return []
-        
+
+        pre_tokens = re.findall(self.pat, text)
         ids = []
-        # TODO: Implement encoding
-        
-        raise NotImplementedError("Implement _encode_chunk")
+
+        for pre_token in pre_tokens:
+            byte_sequences = self._bpe(bytes(pre_token, "utf-8"))
+            for byte in byte_sequences:
+                token_id = self.inverse_vocab.get(byte, None)
+                if token_id is None:
+                    # Handle unknown tokens by falling back to individual bytes
+                    ids.extend([b for b in bytes])
+                else:
+                    ids.append(token_id)
+        return ids
 
     def encode(self, text: str) -> list[int]:
         """
         Encode a string to a list of token IDs.
-        
+
         Args:
             text: Input string to encode
-            
+
         Returns:
             List of token IDs
         """
         if not text:
             return []
-        
+
         ids = []
-        
+
         # Split by special tokens first
         parts = self._split_with_special_tokens(text)
-        
+
         for part, is_special in parts:
             if is_special:
                 # Add special token ID
@@ -168,59 +201,59 @@ class Tokenizer:
             else:
                 # Encode regular text
                 ids.extend(self._encode_chunk(part))
-        
+        print("at the end of encode:", ids)
         return ids
 
     def decode(self, ids: list[int]) -> str:
         """
         Decode a list of token IDs to a string.
-        
+
         Args:
             ids: List of token IDs
-            
+
         Returns:
             Decoded string
-        
+
         Algorithm:
             1. For each token_id, look up corresponding bytes in self.vocab
             2. Concatenate all byte chunks
             3. Decode as UTF-8 with errors="replace"
         """
+        print("ids:", ids)
         if not ids:
             return ""
-        
-        # TODO: Implement decoding
-        
-        raise NotImplementedError("Implement decode")
+        token_bytes = b''.join([self.vocab[tok_id] for tok_id in ids])
+        print(f"{token_bytes=}")
+        return token_bytes.decode("utf-8", errors="replace")
 
     def encode_iterable(self, iterable: Iterator[str]) -> Iterator[int]:
         """
         Memory-efficient encoding of an iterable of strings.
         Yields token IDs one at a time without loading entire input into memory.
-        
+
         Args:
             iterable: An iterable of strings (e.g., file handle)
-            
+
         Yields:
             Token IDs one at a time
         """
         # Buffer for handling text that spans multiple lines
         buffer = ""
-        
+
         for chunk in iterable:
             buffer += chunk
-            
+
             # Process complete portions, keeping potential partial special tokens
             # Find the last safe split point
             safe_end = self._find_safe_split_point(buffer)
-            
+
             if safe_end > 0:
                 to_process = buffer[:safe_end]
                 buffer = buffer[safe_end:]
-                
+
                 for token_id in self.encode(to_process):
                     yield token_id
-        
+
         # Process remaining buffer
         if buffer:
             for token_id in self.encode(buffer):
@@ -235,19 +268,19 @@ class Tokenizer:
         """
         if not text:
             return 0
-        
+
         # Check if any special token could be starting at the end
         max_special_len = max((len(s) for s in self.special_tokens), default=0)
-        
+
         # We need to keep at least max_special_len - 1 characters in buffer
         # to avoid splitting a special token
         min_keep = max_special_len - 1 if max_special_len > 0 else 0
-        
+
         if len(text) <= min_keep:
             return 0
-        
+
         safe_end = len(text)
-        
+
         # Check for partial special token matches at the end
         for special in self.special_tokens:
             # Check if any prefix of special token matches end of text
@@ -255,7 +288,7 @@ class Tokenizer:
                 prefix = special[:prefix_len]
                 if text.endswith(prefix):
                     safe_end = min(safe_end, len(text) - prefix_len)
-        
+
         # Don't split in the middle of trailing whitespace
         # This prevents breaking up tokens like '\n\n'
         if safe_end > 0:
@@ -263,12 +296,12 @@ class Tokenizer:
             last_non_ws = safe_end - 1
             while last_non_ws >= 0 and text[last_non_ws].isspace():
                 last_non_ws -= 1
-            
+
             # If there's trailing whitespace, don't include it in this chunk
             # unless the entire text is whitespace
             if last_non_ws >= 0 and last_non_ws < safe_end - 1:
                 safe_end = last_non_ws + 1
-        
+
         return safe_end
 
 
@@ -279,12 +312,12 @@ def get_tokenizer(
 ) -> Tokenizer:
     """
     Create a tokenizer from vocabulary and merge rules.
-    
+
     Args:
         vocab: Mapping from token ID to bytes
         merges: List of BPE merge pairs
         special_tokens: Optional list of special token strings
-        
+
     Returns:
         Tokenizer instance
     """

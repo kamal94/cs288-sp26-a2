@@ -8,7 +8,7 @@ from a text corpus, compatible with GPT-2 style tokenization.
 from __future__ import annotations
 
 import regex as re
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterator
 
@@ -193,6 +193,72 @@ def train_bpe(
         for i in range(2, len(special_bytes) + 1):
             forbidden_substrings.add(special_bytes[:i])
     
-    # TODO: Implement BPE training
+    # Initialize vocab
+    vocab = { k: bytes(v, "utf-8") for k,v in enumerate(special_tokens)}
+    for i in range(256):
+        vocab[i+len(special_tokens)] = bytes([i])
     
-    raise NotImplementedError("Implement train_bpe")
+    # tuple(bytes("hello", "utf-8"))
+    # (104, 101, 108, 108, 111)
+    pre_tokenized = [
+        tuple(bytes([w]) for w in word.encode("utf-8"))
+        for word in pre_tokenize(text, special_tokens)
+        if bytes(word, "utf-8") not in forbidden_substrings
+    ]
+
+    with open("pre_tokenized.txt", "w") as f:
+        f.write(str(pre_tokenized))
+
+    # print("pre_tokenized:", pre_tokenized)
+    # {(104, 101, 108, 108, 111): 1}
+    word_freqs = Counter(pre_tokenized)
+
+    pair_counts = count_pairs(word_freqs)
+    
+    merges = []
+    while len(vocab) < vocab_size:
+        if not pair_counts:
+            break
+        best_pair = max(pair_counts, key=lambda p: (pair_counts[p], p))
+        # print(pair_counts)
+        print("best pair:", best_pair, pair_counts[best_pair])
+        if not best_pair:
+            print("something went horribly wrong...")
+            continue
+        merged_token = best_pair[0] + best_pair[1]
+        # print("merged token:", merged_token)
+        merges.append(best_pair)
+        to_delete = []
+        to_add = {}
+        for word , count in word_freqs.items():
+            merged_word = merge_word(word, best_pair)
+            if merged_word != word:
+                to_delete.append(word)
+                to_add[merged_word] = count
+
+        for delete_word in to_delete:
+            del word_freqs[delete_word]
+        for k,v in to_add.items():
+            word_freqs[k] = v
+        
+
+        vocab[len(vocab)] = merged_token
+        pair_counts = count_pairs(word_freqs)
+    print("vocab:" , vocab)
+    for merge in merges:
+        print(merge)
+    return vocab, merges
+
+
+def count_pairs(word_freqs):
+    pair_freqs = defaultdict(int)
+    # print(f"{pre_tokenized=}")
+    for token, freq in word_freqs.items():
+        # print("token:", token)
+        pair_counts = defaultdict(int)
+        for i in range(len(token)-1):
+            pair_counts[(token[i], token[i+1])] += 1
+        for pair, count in pair_counts.items():
+            # print(f"pair {pair} had {count} counts")
+            pair_freqs[pair] += count * freq
+    return pair_freqs

@@ -107,8 +107,9 @@ def test_roundtrip_single_character():
         vocab_path=VOCAB_PATH,
         merges_path=MERGES_PATH,
     )
-    test_string = "s"
+    test_string = "ssdfdsfsd"
     encoded_ids = tokenizer.encode(test_string)
+    print("encoded ids:", encoded_ids)
     decoded_string = tokenizer.decode(encoded_ids)
     assert test_string == decoded_string
 
