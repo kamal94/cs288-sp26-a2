@@ -40,6 +40,7 @@ def cross_entropy(logits: Tensor, targets: Tensor) -> Tensor:
         Scalar tensor containing the mean cross-entropy loss
     """
     # TODO: Implement cross-entropy loss
+    print(f"{targets=}")
     N = targets.shape[0]
     normalized = softmax(logits, dim=-1)
     one_hot_vectors = torch.zeros(normalized.shape)
@@ -164,5 +165,16 @@ def perplexity(logits: Tensor, targets: Tensor, ignore_index: int = -100) -> Ten
         tensor(3.)  # Equal to vocab_size (worst case for uniform)
     """
     # TODO: Implement perplexity
-    
-    raise NotImplementedError("Implement perplexity")
+    N = targets.shape[0]
+    normalized = softmax(logits, dim=-1)
+    one_hot_vectors = torch.zeros(normalized.shape)
+    for i, entry in enumerate(targets):
+        if entry == ignore_index:
+            continue
+        one_hot_vectors[i][entry] = 1
+    # inline softmax for precision
+    shifted = logits - logits.max(dim=-1, keepdim=True).values
+    log_probabilities = shifted - torch.log(torch.exp(shifted).sum(dim=1, keepdim=True))
+    cross_e =  - torch.sum(one_hot_vectors * log_probabilities)/N
+
+    return torch.exp(cross_e)
