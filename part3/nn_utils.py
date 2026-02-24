@@ -2,6 +2,7 @@
 Neural network utilities for Transformer implementation.
 Contains basic building blocks: softmax, cross-entropy, gradient clipping, token accuracy, perplexity.
 """
+from logging import logProcesses
 import torch
 from torch import Tensor
 
@@ -19,7 +20,10 @@ def softmax(x: Tensor, dim: int = -1) -> Tensor:
     """
     # TODO: Implement numerically stable softmax. You can re-use the same one 
     # used in part 2. But for this problem, you need to implement a numerically stable version to pass harder tests.
-    
+    x_max = x.max(dim=dim, keepdim=True).values
+    x_exp = torch.exp(x - x_max)
+    return x_exp / x_exp.sum(dim=dim, keepdim=True)
+
     raise NotImplementedError("Implement softmax")
 
 
@@ -36,7 +40,15 @@ def cross_entropy(logits: Tensor, targets: Tensor) -> Tensor:
         Scalar tensor containing the mean cross-entropy loss
     """
     # TODO: Implement cross-entropy loss
-    
+    N = targets.shape[0]
+    normalized = softmax(logits, dim=-1)
+    one_hot_vectors = torch.zeros(normalized.shape)
+    for i, entry in enumerate(targets):
+        one_hot_vectors[i][entry] = 1
+    # inline softmax for precision
+    shifted = logits - logits.max(dim=-1, keepdim=True).values
+    log_probabilities = shifted - torch.log(torch.exp(shifted).sum(dim=1, keepdim=True))
+    return - torch.sum(one_hot_vectors * log_probabilities)/N
     raise NotImplementedError("Implement cross_entropy")
 
 
@@ -52,8 +64,21 @@ def gradient_clipping(parameters, max_norm: float) -> Tensor:
         The total norm of the gradients before clipping
     """
     # TODO: Implement gradient clipping
-    
-    raise NotImplementedError("Implement gradient_clipping")
+    # for parameter in parameters:
+    total_norm = 0
+    for parameter in parameters:
+        if parameter.grad is None:
+            continue
+        total_norm += torch.norm(parameter.grad) ** 2
+
+    total_norm = torch.sqrt(total_norm)
+
+    if total_norm > max_norm:
+        for parameter in parameters:
+            if parameter.grad is None:
+                continue
+            parameter.grad.data *= max_norm / total_norm
+    return total_norm
 
 
 def token_accuracy(logits: Tensor, targets: Tensor, ignore_index: int = -100) -> Tensor:
@@ -84,7 +109,27 @@ def token_accuracy(logits: Tensor, targets: Tensor, ignore_index: int = -100) ->
         tensor(0.6667)  # 2 out of 3 correct
     """
     # TODO: Implement token accuracy
-    
+    total_correct = 0
+    ignored = 0
+    N = targets.shape[0]
+    for i in range(N):
+        if targets[i] == ignore_index:
+            ignored += 1
+            continue
+        high = -float("inf")
+        high_index = -1
+        for j in range(logits.shape[-1]):
+            if logits[i][j] > high:
+                high = logits[i][j]
+                high_index = j
+        if high_index == targets[i]:
+            total_correct += 1
+    print(f"{ignored=}")
+    print(f"{N=}")
+    print(f"{total_correct=}")
+    return torch.tensor(total_correct/(N-ignored))
+            
+
     raise NotImplementedError("Implement token_accuracy")
 
 
