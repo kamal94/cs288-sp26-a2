@@ -124,9 +124,9 @@ def token_accuracy(logits: Tensor, targets: Tensor, ignore_index: int = -100) ->
                 high_index = j
         if high_index == targets[i]:
             total_correct += 1
-    print(f"{ignored=}")
-    print(f"{N=}")
-    print(f"{total_correct=}")
+    # print(f"{ignored=}")
+    # print(f"{N=}")
+    # print(f"{total_correct=}")
     return torch.tensor(total_correct/(N-ignored))
             
 
