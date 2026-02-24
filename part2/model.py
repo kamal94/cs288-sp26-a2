@@ -750,8 +750,13 @@ class TransformerLM(nn.Module):
             token_positions = torch.arange(seq_len, device=token_ids.device).unsqueeze(0).expand(batch_size, -1)
         
         # TODO: Implement TransformerLM forward pass
+        x = self.token_embeddings(token_ids)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.final_ln(x)
+        x = self.output(x)
         
-        raise NotImplementedError("Implement TransformerLM.forward")
+        return x
     
     def load_weights(self, state_dict: dict):
         """
