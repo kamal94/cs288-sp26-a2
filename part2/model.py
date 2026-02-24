@@ -849,9 +849,9 @@ def count_flops_per_token(
         Approximate FLOPs per token
     """
     # TODO: Implement FLOPs counting
-    
-    
-    raise NotImplementedError("Implement count_flops_per_token")
+    attn_flops = d_model * d_model * num_heads * context_length * 2
+    ffn_flops = d_model *d_ff * 2
+    return num_layers * (attn_flops + ffn_flops)
 
 
 def estimate_memory_bytes(
@@ -875,5 +875,10 @@ def estimate_memory_bytes(
         Approximate memory in bytes
     """
     # TODO: Implement memory estimation
-    
-    raise NotImplementedError("Implement estimate_memory_bytes")
+    return dtype_bytes * (
+        num_layers * (
+            d_model * d_model * 2 +
+            d_model * d_ff * 2 +
+            d_model * vocab_size * 2
+        )
+    )
